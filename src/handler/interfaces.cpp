@@ -34,6 +34,7 @@
 //common settings
 std::string gPrefPath = "pref.ini", gDefaultExtConfig;
 string_array gExcludeRemarks, gIncludeRemarks, gCustomRulesets, gStreamNodeRules, gTimeNodeRules;
+std::string gExcludeUrlRemark;
 std::vector<ruleset_content> gRulesetContent;
 std::string gListenAddress = "127.0.0.1", gDefaultUrls, gInsertUrls, gManagedConfigPrefix;
 int gListenPort = 25500, gMaxPendingConns = 10, gMaxConcurThreads = 4;
@@ -634,6 +635,7 @@ void readYAMLConf(YAML::Node &node)
             eraseElements(tempArray);
         }
     }
+    section["exclude_url_remark"] >> gExcludeUrlRemark;
     section["prepend_insert_url"] >> gPrependInsert;
     if(section["exclude_remarks"].IsSequence())
         section["exclude_remarks"] >> gExcludeRemarks;
@@ -1586,6 +1588,11 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS)
         x = regTrim(x);
         //std::cerr<<"Fetching node data from url '"<<x<<"'."<<std::endl;
         writeLog(0, "Fetching node data from url '" + x + "'.", LOG_LEVEL_INFO);
+        if (regMatch(x, gExcludeUrlRemark))
+        {
+            *status_code = 400;
+            return "The following link is banned: " + x;
+        }
         if(addNodes(x, nodes, groupID, parse_set) == -1)
         {
             if(gSkipFailedLinks)
