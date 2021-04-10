@@ -334,6 +334,7 @@ void readYAMLConf(YAML::Node &node)
             eraseElements(tempArray);
         }
     }
+    section["exclude_url_remark"] >> global.excludeUrlRemark;
     section["prepend_insert_url"] >> global.prependInsert;
     if(section["exclude_remarks"].IsSequence())
         section["exclude_remarks"] >> global.excludeRemarks;

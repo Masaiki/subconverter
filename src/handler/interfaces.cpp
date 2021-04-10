@@ -594,6 +594,11 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS)
         x = regTrim(x);
         //std::cerr<<"Fetching node data from url '"<<x<<"'."<<std::endl;
         writeLog(0, "Fetching node data from url '" + x + "'.", LOG_LEVEL_INFO);
+        if (regMatch(x, global.excludeUrlRemark))
+        {
+            *status_code = 400;
+            return "The following link is banned: " + x;
+        }
         if(addNodes(x, nodes, groupID, parse_set) == -1)
         {
             if(global.skipFailedLinks)
