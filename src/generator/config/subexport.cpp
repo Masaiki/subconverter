@@ -76,10 +76,6 @@ bool matchRange(const std::string &range, int target)
         }
         else if(regMatch(x, reg_range))
         {
-            /*
-            range_begin = to_int(regReplace(x, reg_range, "$1"), INT_MAX);
-            range_end = to_int(regReplace(x, reg_range, "$2"), INT_MIN);
-            */
             regGetMatch(x, reg_range, 3, 0, &range_begin_str, &range_end_str);
             range_begin = to_int(range_begin_str, INT_MAX);
             range_end = to_int(range_end_str, INT_MIN);
@@ -88,15 +84,13 @@ bool matchRange(const std::string &range, int target)
         }
         else if(regMatch(x, reg_not))
         {
+            match = true;
             if(to_int(regReplace(x, reg_not, "$1"), INT_MAX) == target)
                 match = false;
         }
         else if(regMatch(x, reg_not_range))
         {
-            /*
-            range_begin = to_int(regReplace(x, reg_range, "$1"), INT_MAX);
-            range_end = to_int(regReplace(x, reg_range, "$2"), INT_MIN);
-            */
+            match = true;
             regGetMatch(x, reg_range, 3, 0, &range_begin_str, &range_end_str);
             range_begin = to_int(range_begin_str, INT_MAX);
             range_end = to_int(range_end_str, INT_MIN);
@@ -189,7 +183,7 @@ void groupGenerate(const std::string &rule, std::vector<Proxy> &nodelist, string
         filtered_nodelist.emplace_back(rule.substr(2));
     }
 #ifndef NO_JS_RUNTIME
-    else if(startsWith(rule, "script:"))
+    else if(startsWith(rule, "script:") && ext.authorized)
     {
         script_safe_runner(ext.js_runtime, ext.js_context, [&](qjs::Context &ctx){
             std::string script = fileGet(rule.substr(7), true);
@@ -296,6 +290,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
             singleproxy["tls"] = x.TLSSecure;
             if(!scv.is_undef())
                 singleproxy["skip-cert-verify"] = scv.get();
+            if(!x.ServerName.empty())
+                singleproxy["servername"] = x.ServerName;
             switch(hash_(x.TransferProtocol))
             {
             case "tcp"_hash:
@@ -387,6 +383,7 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
                 singleproxy["skip-cert-verify"] = scv.get();
             break;
         case ProxyType::HTTP:
+        case ProxyType::HTTPS:
             singleproxy["type"] = "http";
             if(!x.Username.empty())
                 singleproxy["username"] = x.Username;
@@ -396,7 +393,7 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
                 if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit))
                     singleproxy["password"].SetTag("str");
             }
-            singleproxy["tls"] = type == "HTTPS";
+            singleproxy["tls"] = x.TLSSecure;
             if(!scv.is_undef())
                 singleproxy["skip-cert-verify"] = scv.get();
             break;
@@ -429,8 +426,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
         case ProxyType::Snell:
             singleproxy["type"] = "snell";
             singleproxy["psk"] = x.Password;
-            if(x.AlterId != 0)
-                singleproxy["version"] = x.AlterId;
+            if(x.SnellVersion != 0)
+                singleproxy["version"] = x.SnellVersion;
             if(!x.OBFS.empty())
             {
                 singleproxy["obfs-opts"]["mode"] = x.OBFS;
@@ -583,6 +580,8 @@ std::string proxyToClash(std::vector<Proxy> &nodes, const std::string &base_conf
 
     std::string output_content = rulesetToClashStr(yamlnode, ruleset_content_array, ext.overwrite_original_rules, ext.clash_new_field_name);
     output_content.insert(0, YAML::Dump(yamlnode));
+    //rulesetToClash(yamlnode, ruleset_content_array, ext.overwrite_original_rules, ext.clash_new_field_name);
+    //std::string output_content = YAML::Dump(yamlnode);
 
     return output_content;
 }
@@ -647,13 +646,13 @@ std::string proxyToSurge(std::vector<Proxy> &nodes, const std::string &base_conf
         switch(x.Type)
         {
         case ProxyType::Shadowsocks:
-            if(surge_ver >= 3)
+            if(surge_ver >= 3 || surge_ver == -3)
             {
                 proxy = "ss, " + hostname + ", " + port + ", encrypt-method=" + method + ", password=" + password;
             }
             else
             {
-                proxy = "custom, "  + hostname + ", " + port + ", " + method + ", " + password + ", https://github.com/ConnersHua/SSEncrypt/raw/master/SSEncrypt.module";
+                proxy = "custom, "  + hostname + ", " + port + ", " + method + ", " + password + ", https://github.com/pobizhe/SSEncrypt/raw/master/SSEncrypt.module";
             }
             if(!plugin.empty())
             {
@@ -672,7 +671,7 @@ std::string proxyToSurge(std::vector<Proxy> &nodes, const std::string &base_conf
         case ProxyType::VMess:
             if(surge_ver < 4 && surge_ver != -3)
                 continue;
-            proxy = "vmess, " + hostname + ", " + port + ", username=" + id + ", tls=" + (tlssecure ? "true" : "false");
+            proxy = "vmess, " + hostname + ", " + port + ", username=" + id + ", tls=" + (tlssecure ? "true" : "false") +  ", vmess-aead=" + (x.AlterId == 0 ? "true" : "false");
             if(tlssecure && !tls13.is_undef())
                 proxy += ", tls13=" + std::string(tls13 ? "true" : "false");
             switch(hash_(transproto))
@@ -680,7 +679,10 @@ std::string proxyToSurge(std::vector<Proxy> &nodes, const std::string &base_conf
             case "tcp"_hash:
                 break;
             case "ws"_hash:
-                proxy += ", ws=true, ws-path=" + path + ", sni=" + host + ", ws-headers=Host:" + host;
+                if(host.empty())
+                    proxy += ", ws=true, ws-path=" + path + ", sni=" + hostname;
+                else
+                    proxy += ", ws=true, ws-path=" + path + ", sni=" + hostname + ", ws-headers=Host:" + host;
                 if(!edge.empty())
                     proxy += "|Edge:" + edge;
                 break;
@@ -722,6 +724,15 @@ std::string proxyToSurge(std::vector<Proxy> &nodes, const std::string &base_conf
             if(!scv.is_undef())
                 proxy += ", skip-cert-verify=" + scv.get_str();
             break;
+        case ProxyType::HTTPS:
+            if(surge_ver == -3)
+            {
+                proxy = "https, " + hostname + ", " + port + ", " + username + ", " + password;
+                if(!scv.is_undef())
+                    proxy += ", skip-cert-verify=" + scv.get_str();
+                break;
+            }
+            [[fallthrough]];
         case ProxyType::HTTP:
             proxy = "http, " + hostname + ", " + port;
             if(!username.empty())
@@ -733,9 +744,11 @@ std::string proxyToSurge(std::vector<Proxy> &nodes, const std::string &base_conf
                 proxy += ", skip-cert-verify=" + scv.get_str();
             break;
         case ProxyType::Trojan:
-            if(surge_ver < 4)
+            if(surge_ver < 4 && surge_ver != -3)
                 continue;
             proxy = "trojan, " + hostname + ", " + port + ", password=" + password;
+            if(x.SnellVersion != 0)
+                proxy += ", version=" + std::to_string(x.SnellVersion);
             if(!host.empty())
                 proxy += ", sni=" + host;
             if(!scv.is_undef())
@@ -782,9 +795,9 @@ std::string proxyToSurge(std::vector<Proxy> &nodes, const std::string &base_conf
         case ProxyGroupType::Fallback:
             break;
         case ProxyGroupType::LoadBalance:
-            if(surge_ver < 1)
+            if(surge_ver < 1 && surge_ver != -3)
                 continue;
-            [[fallthrough]];
+            break;
         case ProxyGroupType::SSID:
             proxy = x.TypeStr() + ",default=" + x.Proxies[0] + ",";
             proxy += join(x.Proxies.begin() + 1, x.Proxies.end(), ",");
@@ -815,16 +828,18 @@ std::string proxyToSurge(std::vector<Proxy> &nodes, const std::string &base_conf
 
         proxy = x.TypeStr() + ",";
         proxy += join(filtered_nodelist, ",");
-        if(x.Type == ProxyGroupType::URLTest || x.Type == ProxyGroupType::Fallback)
+        if(x.Type == ProxyGroupType::URLTest || x.Type == ProxyGroupType::Fallback || x.Type == ProxyGroupType::LoadBalance)
         {
             proxy += ",url=" + x.Url + ",interval=" + std::to_string(x.Interval);
             if(x.Tolerance > 0)
                 proxy += ",tolerance=" + std::to_string(x.Tolerance);
             if(x.Timeout > 0)
                 proxy += ",timeout=" + std::to_string(x.Timeout);
+            if(!x.Persistent.is_undef())
+                proxy += ",persistent=" + x.Persistent.get_str();
+            if(!x.EvaluateBeforeUse.is_undef())
+                proxy += ",evaluate-before-use=" + x.EvaluateBeforeUse.get_str();
         }
-        else if(x.Type == ProxyGroupType::LoadBalance)
-            proxy += ",url=" + x.Url;
 
         ini.Set("{NONAME}", x.Name + " = " + proxy); //insert order
     }
@@ -1104,6 +1119,7 @@ void proxyToQuan(std::vector<Proxy> &nodes, INIReader &ini, std::vector<RulesetC
             }
             break;
         case ProxyType::HTTP:
+        case ProxyType::HTTPS:
             proxyStr = remark + " = http, upstream-proxy-address=" + hostname + ", upstream-proxy-port=" + port + ", group=" + x.Group;
             if(!username.empty() && !password.empty())
                 proxyStr += ", upstream-proxy-auth=true, upstream-proxy-username=" + username + ", upstream-proxy-password=" + password;
@@ -1290,7 +1306,7 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
         case ProxyType::VMess:
             if(method == "auto")
                 method = "chacha20-ietf-poly1305";
-            proxyStr = "vmess = " + hostname + ":" + port + ", method=" + method + ", password=" + id;
+            proxyStr = "vmess = " + hostname + ":" + port + ", method=" + method + ", password=" + id + ", aead=" + (x.AlterId == 0 ? "true" : "false");
             if(tlssecure && !tls13.is_undef())
                 proxyStr += ", tls13=" + std::string(tls13 ? "true" : "false");
             if(transproto == "ws")
@@ -1347,12 +1363,17 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
                 proxyStr += ", obfs-host=" + obfsparam;
             break;
         case ProxyType::HTTP:
+        case ProxyType::HTTPS:
             proxyStr = "http = " + hostname + ":" + port + ", username=" + (username.empty() ? "none" : username) + ", password=" + (password.empty() ? "none" : password);
             if(tlssecure)
             {
                 proxyStr += ", over-tls=true";
                 if(!tls13.is_undef())
                     proxyStr += ", tls13=" + std::string(tls13 ? "true" : "false");
+            }
+            else
+            {
+                proxyStr += ", over-tls=false";
             }
             break;
         case ProxyType::Trojan:
@@ -1363,6 +1384,27 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
                 if(!tls13.is_undef())
                     proxyStr += ", tls13=" + std::string(tls13 ? "true" : "false");
             }
+            else
+            {
+                proxyStr += ", over-tls=false";
+            }
+            break;
+        case ProxyType::SOCKS5:
+            proxyStr = "socks5 = " + hostname + ":" + port;
+            if(!username.empty() && !password.empty())
+            {
+                proxyStr += ", username=" + username + ", password=" + password;
+                if(tlssecure)
+                {
+                    proxyStr += ", over-tls=true, tls-host=" + host;
+                    if(!tls13.is_undef())
+                        proxyStr += ", tls13=" + std::string(tls13 ? "true" : "false");
+                }
+                else
+                {
+                    proxyStr += ", over-tls=false";
+                }
+            }
             break;
         default:
             continue;
@@ -1371,7 +1413,7 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
             proxyStr += ", fast-open=" + tfo.get_str();
         if(!udp.is_undef())
             proxyStr += ", udp-relay=" + udp.get_str();
-        if(tlssecure && !scv.is_undef() && (x.Type == ProxyType::HTTP || x.Type == ProxyType::Trojan))
+        if(tlssecure && !scv.is_undef() && (x.Type != ProxyType::Shadowsocks && x.Type != ProxyType::ShadowsocksR))
             proxyStr += ", tls-verification=" + scv.reverse().get_str();
         proxyStr += ", tag=" + remark;
 
@@ -1384,17 +1426,13 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
         return;
 
     string_multimap original_groups;
-    string_array filtered_nodelist;
     ini.SetCurrentSection("policy");
     ini.GetItems(original_groups);
     ini.EraseSection();
 
-    std::string singlegroup;
-    std::string proxies;
-    string_array vArray;
     for(const ProxyGroupConfig &x : extra_proxy_group)
     {
-        eraseElements(filtered_nodelist);
+        string_array filtered_nodelist;
 
         switch(x.Type)
         {
@@ -1442,7 +1480,7 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
         });
         if(iter != original_groups.end())
         {
-            vArray = split(iter->second, ",");
+            string_array vArray = split(iter->second, ",");
             if(vArray.size() > 1)
             {
                 if(trim(vArray[vArray.size() - 1]).find("img-url") == 0)
@@ -1450,70 +1488,14 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
             }
         }
 
-        proxies = join(filtered_nodelist, ", ");
+        std::string proxies = join(filtered_nodelist, ", ");
 
-        singlegroup = type + "=" + x.Name + ", " + proxies;
+        std::string singlegroup = type + "=" + x.Name + ", " + proxies;
         ini.Set("{NONAME}", singlegroup);
     }
 
     if(ext.enable_rule_generator)
         rulesetToSurge(ini, ruleset_content_array, -1, ext.overwrite_original_rules, ext.managed_config_prefix);
-
-    //process scripts
-    string_multimap scripts;
-    std::string content, title, url;
-    const std::string pattern = "^(.*? url script-.*? )(.*?)$";
-    if(ini.SectionExist("rewrite_local") && !ext.quanx_dev_id.empty())
-    {
-        ini.GetItems("rewrite_local", scripts);
-        ini.EraseSection("rewrite_local");
-        ini.SetCurrentSection("rewrite_local");
-        for(auto &x : scripts)
-        {
-            title = x.first;
-            if(title != "{NONAME}")
-                content = title + "=" + x.second;
-            else
-                content = x.second;
-
-            if(regMatch(content, pattern))
-            {
-                url = regReplace(content, pattern, "$2");
-                if(isLink(url))
-                {
-                    url = ext.managed_config_prefix + "/qx-script?id=" + ext.quanx_dev_id + "&url=" + urlSafeBase64Encode(url);
-                    content = regReplace(content, pattern, "$1") + url;
-                }
-            }
-            ini.Set("{NONAME}", content);
-        }
-    }
-    eraseElements(scripts);
-    string_size pos;
-    if(ini.SectionExist("rewrite_remote") && !ext.quanx_dev_id.empty())
-    {
-        ini.GetItems("rewrite_remote", scripts);
-        ini.EraseSection("rewrite_remote");
-        ini.SetCurrentSection("rewrite_remote");
-        for(auto &x : scripts)
-        {
-            title = x.first;
-            if(title != "{NONAME}")
-                content = title + "=" + x.second;
-            else
-                content = x.second;
-
-            if(isLink(content))
-            {
-                pos = content.find(",");
-                url = ext.managed_config_prefix + "/qx-rewrite?id=" + ext.quanx_dev_id + "&url=" + urlSafeBase64Encode(content.substr(0, pos));
-                if(pos != content.npos)
-                    url += content.substr(pos);
-                content = url;
-            }
-            ini.Set("{NONAME}", content);
-        }
-    }
 }
 
 std::string proxyToSSD(std::vector<Proxy> &nodes, std::string &group, std::string &userinfo, extra_settings &ext)
