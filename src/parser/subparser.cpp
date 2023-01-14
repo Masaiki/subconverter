@@ -756,7 +756,12 @@ void explodeTrojan(std::string trojan, Proxy &node)
 
     if(getUrlArg(addition, "ws") == "1")
     {
-        path = getUrlArg(addition, "wspath");
+        path = urlDecode(getUrlArg(addition, "wspath"));
+        network = "ws";
+    }
+    else if (getUrlArg(addition, "type") == "ws")
+    {
+        path = urlDecode(getUrlArg(addition, "path"));
         network = "ws";
     }
 
