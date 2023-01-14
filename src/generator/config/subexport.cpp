@@ -260,8 +260,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
             singleproxy["type"] = "ss";
             singleproxy["cipher"] = x.EncryptMethod;
             singleproxy["password"] = x.Password;
-            if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit) && !x.Password.empty())
-                singleproxy["password"].SetTag("str");
+//            if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit) && !x.Password.empty())
+//                singleproxy["password"].SetTag("str");
             switch(hash_(x.Plugin))
             {
             case "simple-obfs"_hash:
@@ -354,8 +354,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
             singleproxy["type"] = "ssr";
             singleproxy["cipher"] = x.EncryptMethod == "none" ? "dummy" : x.EncryptMethod;
             singleproxy["password"] = x.Password;
-            if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit) && !x.Password.empty())
-                singleproxy["password"].SetTag("str");
+//            if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit) && !x.Password.empty())
+//                singleproxy["password"].SetTag("str");
             singleproxy["protocol"] = x.Protocol;
             singleproxy["obfs"] = x.OBFS;
             if(clashR)
@@ -376,8 +376,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
             if(!x.Password.empty())
             {
                 singleproxy["password"] = x.Password;
-                if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit))
-                    singleproxy["password"].SetTag("str");
+//                if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit))
+//                    singleproxy["password"].SetTag("str");
             }
             if(!scv.is_undef())
                 singleproxy["skip-cert-verify"] = scv.get();
@@ -390,8 +390,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
             if(!x.Password.empty())
             {
                 singleproxy["password"] = x.Password;
-                if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit))
-                    singleproxy["password"].SetTag("str");
+//                if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit))
+//                    singleproxy["password"].SetTag("str");
             }
             singleproxy["tls"] = x.TLSSecure;
             if(!scv.is_undef())
@@ -402,8 +402,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
             singleproxy["password"] = x.Password;
             if(!x.Host.empty())
                 singleproxy["sni"] = x.Host;
-            if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit) && !x.Password.empty())
-                singleproxy["password"].SetTag("str");
+//            if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit) && !x.Password.empty())
+//                singleproxy["password"].SetTag("str");
             if(!scv.is_undef())
                 singleproxy["skip-cert-verify"] = scv.get();
             switch(hash_(x.TransferProtocol))
@@ -434,8 +434,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
                 if(!x.Host.empty())
                     singleproxy["obfs-opts"]["host"] = x.Host;
             }
-            if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit) && !x.Password.empty())
-                singleproxy["password"].SetTag("str");
+//            if(std::all_of(x.Password.begin(), x.Password.end(), ::isdigit) && !x.Password.empty())
+//                singleproxy["password"].SetTag("str");
             break;
         default:
             continue;
