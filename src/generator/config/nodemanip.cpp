@@ -142,6 +142,9 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
         writeLog(LOG_TYPE_INFO, "Downloading subscription data...");
         if(startsWith(link, "surge:///install-config")) //surge config link
             link = urlDecode(getUrlArg(link, "url"));
+        if (link.find("subscribe.iowoi-node.xyz") != std::string::npos) {
+            (*request_headers)["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36";
+        }
         strSub = webGet(link, proxy, global.cacheSubscription, &extra_headers, request_headers);
         /*
         if(strSub.size() == 0)
