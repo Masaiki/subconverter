@@ -1,5 +1,9 @@
 name: GitHub CI
-on: [push]
+on: 
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+  pull_request:
 
 concurrency: 
   group: ${{ github.ref }}-${{ github.workflow }}
@@ -17,16 +21,16 @@ jobs:
     - name: Build
       run: docker run --rm -v $GITHUB_WORKSPACE:/root/workdir multiarch/alpine:x86-latest-stable /bin/sh -c "apk add bash git nodejs npm && cd /root/workdir && chmod +x scripts/build.alpine.release.sh && bash scripts/build.alpine.release.sh"
     - name: Upload
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: subconverter_linux32
         path: subconverter/
     - name: Package Release
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       run: tar czf subconverter_linux32.tar.gz subconverter
     - name: Draft Release
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       with:
         files: subconverter_linux32.tar.gz
         draft: true
@@ -42,16 +46,16 @@ jobs:
     - name: Build
       run: docker run -v $GITHUB_WORKSPACE:/root/workdir multiarch/alpine:amd64-latest-stable /bin/sh -c "apk add bash git nodejs npm && cd /root/workdir && chmod +x scripts/build.alpine.release.sh && bash scripts/build.alpine.release.sh"
     - name: Upload
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: subconverter_linux64
         path: subconverter/
     - name: Package Release
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       run: tar czf subconverter_linux64.tar.gz subconverter
     - name: Draft Release
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       with:
         files: subconverter_linux64.tar.gz
         draft: true
@@ -67,16 +71,16 @@ jobs:
     - name: Build
       run: bash scripts/build.macos.release.sh
     - name: Upload
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: subconverter_darwin64
         path: subconverter/
     - name: Package Release
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       run: tar czf subconverter_darwin64.tar.gz subconverter
     - name: Draft Release
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       with:
         files: subconverter_darwin64.tar.gz
         draft: true
@@ -104,16 +108,16 @@ jobs:
     - name: Build
       run: bash scripts/build.windows.release.sh
     - name: Upload
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: subconverter_win64
         path: subconverter/
     - name: Package Release
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       run: 7z a subconverter_win64.7z subconverter/
     - name: Draft Release
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       with:
         files: subconverter_win64.7z
         draft: true
@@ -141,16 +145,16 @@ jobs:
     - name: Build
       run: bash scripts/build.windows.release.sh
     - name: Upload
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: subconverter_win32
         path: subconverter/
     - name: Package Release
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       run: 7z a subconverter_win32.7z subconverter/
     - name: Draft Release
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
       with:
         files: subconverter_win32.7z
         draft: true
