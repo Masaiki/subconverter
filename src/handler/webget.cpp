@@ -181,7 +181,7 @@ static int curlGet(const FetchArgument &argument, FetchResult &result)
     {
         if(startsWith(argument.proxy, "cors:"))
         {
-            list = curl_slist_append(list, "X-Requested-With: subconverter " VERSION);
+//             list = curl_slist_append(list, "X-Requested-With: subconverter " VERSION);
             new_url = argument.proxy.substr(5) + argument.url;
         }
         else
@@ -196,8 +196,8 @@ static int curlGet(const FetchArgument &argument, FetchResult &result)
         for(auto &x : *argument.request_headers)
             list = curl_slist_append(list, (x.first + ": " + x.second).data());
     }
-    list = curl_slist_append(list, "SubConverter-Request: 1");
-    list = curl_slist_append(list, "SubConverter-Version: " VERSION);
+//     list = curl_slist_append(list, "SubConverter-Request: 1");
+//     list = curl_slist_append(list, "SubConverter-Version: " VERSION);
     if(list)
         curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, list);
 
