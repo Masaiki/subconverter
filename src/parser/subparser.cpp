@@ -764,6 +764,15 @@ void explodeTrojan(std::string trojan, Proxy &node)
         path = urlDecode(getUrlArg(addition, "path"));
         network = "ws";
     }
+    // support the trojan link format used by v2ryaN and X-ui.
+    // format: trojan://{password}@{server}:{port}?type=ws&security=tls&path={path (urlencoded)}&sni={host}#{name}
+    else if(getUrlArg(addition, "type") == "ws")
+    {
+        path = getUrlArg(addition, "path");
+        if(path.substr(0, 3) == "%2F")
+            path = urlDecode(path);
+        network = "ws";
+    }
 
     if(remark.empty())
         remark = server + ":" + port;
@@ -1298,17 +1307,17 @@ bool explodeSurge(std::string surge, std::vector<Proxy> &nodes)
     ini.store_isolated_line = true;
     ini.keep_empty_section = false;
     ini.allow_dup_section_titles = true;
-    ini.SetIsolatedItemsSection("Proxy");
-    ini.IncludeSection("Proxy");
-    ini.AddDirectSaveSection("Proxy");
+    ini.set_isolated_items_section("Proxy");
+    ini.include_section("Proxy");
+    ini.add_direct_save_section("Proxy");
     if(surge.find("[Proxy]") != surge.npos)
-        surge = regReplace(surge, "^[\\S\\s]*?\\[", "[", false);
-    ini.Parse(surge);
+        surge = regReplace(surge, R"(^[\S\s]*?\[)", "[", false);
+    ini.parse(surge);
 
-    if(!ini.SectionExist("Proxy"))
+    if(!ini.section_exist("Proxy"))
         return false;
-    ini.EnterSection("Proxy");
-    ini.GetItems(proxies);
+    ini.enter_section("Proxy");
+    ini.get_items(proxies);
 
     const std::string proxystr = "(.*?)\\s*=\\s*(.*)";
 
