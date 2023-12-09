@@ -2,14 +2,16 @@
 #define PROXY_H_INCLUDED
 
 #include <string>
+#include <vector>
 
-#include "../../utils/tribool.h"
+#include "utils/tribool.h"
 
 using String = std::string;
+using StringArray = std::vector<String>;
 
-enum ProxyType
+enum class ProxyType
 {
-    Unknow,
+    Unknown,
     Shadowsocks,
     ShadowsocksR,
     VMess,
@@ -17,10 +19,11 @@ enum ProxyType
     Snell,
     HTTP,
     HTTPS,
-    SOCKS5
+    SOCKS5,
+    WireGuard
 };
 
-inline String getProxyTypeName(int type)
+inline String getProxyTypeName(ProxyType type)
 {
     switch(type)
     {
@@ -47,7 +50,7 @@ inline String getProxyTypeName(int type)
 
 struct Proxy
 {
-    int Type = ProxyType::Unknow;
+    ProxyType Type = ProxyType::Unknown;
     uint32_t Id = 0;
     uint32_t GroupId = 0;
     String Group;
@@ -84,6 +87,18 @@ struct Proxy
 
     uint16_t SnellVersion = 0;
     String ServerName;
+
+    String SelfIP;
+    String SelfIPv6;
+    String PublicKey;
+    String PrivateKey;
+    String PreSharedKey;
+    StringArray DnsServers;
+    uint16_t Mtu = 0;
+    String AllowedIPs = "0.0.0.0/0, ::/0";
+    uint16_t KeepAlive = 0;
+    String TestUrl;
+    String ClientId;
 };
 
 #define SS_DEFAULT_GROUP "SSProvider"
@@ -93,5 +108,6 @@ struct Proxy
 #define HTTP_DEFAULT_GROUP "HTTPProvider"
 #define TROJAN_DEFAULT_GROUP "TrojanProvider"
 #define SNELL_DEFAULT_GROUP "SnellProvider"
+#define WG_DEFAULT_GROUP "WireGuardProvider"
 
 #endif // PROXY_H_INCLUDED

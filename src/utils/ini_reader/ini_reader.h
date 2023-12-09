@@ -7,9 +7,9 @@
 #include <numeric>
 #include <algorithm>
 
-#include "../codepage.h"
-#include "../file_extra.h"
-#include "../string.h"
+#include "utils/codepage.h"
+#include "utils/file_extra.h"
+#include "utils/string.h"
 
 enum
 {
@@ -21,13 +21,12 @@ enum
     INIREADER_EXCEPTION_NONE
 };
 
-using ini_data_struct = std::map<std::string, std::multimap<std::string, std::string>>;
-using string_multimap = std::multimap<std::string, std::string>;
-using string_array = std::vector<std::string>;
-using string_size = std::string::size_type;
-
 class INIReader
 {
+    using ini_data_struct = std::map<std::string, std::multimap<std::string, std::string>>;
+    using string_multimap = std::multimap<std::string, std::string>;
+    using string_array = std::vector<std::string>;
+    using string_size = std::string::size_type;
     /**
     *  @brief A simple INI reader which utilize map and vector
     *  to store sections and items, allowing access in logarithmic time.

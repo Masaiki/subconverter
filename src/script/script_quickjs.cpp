@@ -2,17 +2,18 @@
 #include <map>
 #include <iostream>
 #include <quickjspp.hpp>
+#include <quickjs/quickjs-libc.h>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif // _WIN32
 
-#include "../handler/multithread.h"
-#include "../handler/webget.h"
-#include "../handler/settings.h"
-#include "../parser/config/proxy.h"
-#include "../utils/map_extra.h"
-#include "../utils/system.h"
+#include "handler/multithread.h"
+#include "handler/webget.h"
+#include "handler/settings.h"
+#include "parser/config/proxy.h"
+#include "utils/map_extra.h"
+#include "utils/system.h"
 #include "script_quickjs.h"
 
 std::string parseProxy(const std::string &source);
@@ -254,7 +255,7 @@ namespace qjs
             string_icase_map res;
             JSPropertyEnum *props = nullptr, *props_begin;
             uint32_t len = 0;
-            JS_GetOwnPropertyNames(ctx, &props, &len, v, 1);
+            JS_GetOwnPropertyNames(ctx, &props, &len, v, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY);
             props_begin = props;
             while(len > 0)
             {
@@ -291,9 +292,7 @@ namespace qjs
         static qjs_fetch_Headers unwrap(JSContext *ctx, JSValueConst v)
         {
             qjs_fetch_Headers result;
-            auto headers = JS_GetPropertyStr(ctx, v, "headers");
-            result.headers = js_traits<detail::string_icase_map>::unwrap(ctx, headers);
-            JS_FreeValue(ctx, headers);
+            result.headers = unwrap_free<detail::string_icase_map>(ctx, v, "headers");
             return result;
         }
         static JSValue wrap(JSContext *ctx, const qjs_fetch_Headers &h)
@@ -310,14 +309,12 @@ namespace qjs
         static qjs_fetch_Request unwrap(JSContext *ctx, JSValueConst v)
         {
             qjs_fetch_Request request;
-            auto headers = JS_GetPropertyStr(ctx, v, "headers");
-            request.method = JS_GetPropertyToString(ctx, v, "method");
-            request.url = JS_GetPropertyToString(ctx, v, "url");
-            request.postdata = JS_GetPropertyToString(ctx, v, "data");
-            request.proxy = JS_GetPropertyToString(ctx, v, "proxy");
-            request.cookies = JS_GetPropertyToString(ctx, v, "cookies");
-            request.headers = js_traits<qjs_fetch_Headers>::unwrap(ctx, headers);
-            JS_FreeValue(ctx, headers);
+            request.method = unwrap_free<std::string>(ctx, v, "method");
+            request.url = unwrap_free<std::string>(ctx, v, "url");
+            request.postdata = unwrap_free<std::string>(ctx, v, "data");
+            request.proxy = unwrap_free<std::string>(ctx, v, "proxy");
+            request.cookies = unwrap_free<std::string>(ctx, v, "cookies");
+            request.headers = unwrap_free<qjs_fetch_Headers>(ctx, v, "headers");
             return request;
         }
     };
@@ -377,6 +374,11 @@ static qjs_fetch_Response qjs_fetch(qjs_fetch_Request request)
     return response;
 }
 
+static std::string qjs_getUrlArg(const std::string &url, const std::string &request)
+{
+    return getUrlArg(url, request);
+}
+
 std::string getGeoIP(const std::string &address, const std::string &proxy)
 {
     return fetchFile("https://api.ip.sb/geoip/" + address, parseProxy(proxy), global.cacheConfig);
@@ -385,7 +387,6 @@ std::string getGeoIP(const std::string &address, const std::string &proxy)
 void script_runtime_init(qjs::Runtime &runtime)
 {
     js_std_init_handlers(runtime.rt);
-    JS_SetModuleLoaderFunc(runtime.rt, nullptr, js_module_loader, nullptr);
 }
 
 int ShowMsgbox(const std::string &title, std::string content, uint16_t type = 0)
@@ -442,7 +443,6 @@ int script_context_init(qjs::Context &context)
             .fun<&qjs_fetch_Headers::parse_from_string>("parse");
         module.class_<qjs_fetch_Request>("Request")
             .constructor<>()
-            .constructor<const std::string&>("Request")
             .fun<&qjs_fetch_Request::method>("method")
             .fun<&qjs_fetch_Request::url>("url")
             .fun<&qjs_fetch_Request::proxy>("proxy")
@@ -455,18 +455,6 @@ int script_context_init(qjs::Context &context)
             .fun<&qjs_fetch_Response::content>("data")
             .fun<&qjs_fetch_Response::cookies>("cookies")
             .fun<&qjs_fetch_Response::headers>("headers");
-            /*
-        module.class_<nodeInfo>("NodeInfo")
-            .constructor<>()
-            .fun<&nodeInfo::linkType>("LinkType")
-            .fun<&nodeInfo::id>("ID")
-            .fun<&nodeInfo::groupID>("GroupID")
-            .fun<&nodeInfo::group>("Group")
-            .fun<&nodeInfo::remarks>("Remark")
-            .fun<&nodeInfo::server>("Hostname")
-            .fun<&nodeInfo::port>("Port")
-            .fun<&nodeInfo::proxyStr>("ProxyInfo");
-            */
         module.class_<Proxy>("Proxy")
             .constructor<>()
             .fun<&Proxy::Type>("Type")
@@ -498,7 +486,20 @@ int script_context_init(qjs::Context &context)
             .fun<&Proxy::UDP>("UDP")
             .fun<&Proxy::TCPFastOpen>("TCPFastOpen")
             .fun<&Proxy::AllowInsecure>("AllowInsecure")
-            .fun<&Proxy::TLS13>("TLS13");
+            .fun<&Proxy::TLS13>("TLS13")
+            .fun<&Proxy::SnellVersion>("SnellVersion")
+            .fun<&Proxy::ServerName>("ServerName")
+            .fun<&Proxy::SelfIP>("SelfIP")
+            .fun<&Proxy::SelfIPv6>("SelfIPv6")
+            .fun<&Proxy::PublicKey>("PublicKey")
+            .fun<&Proxy::PrivateKey>("PrivateKey")
+            .fun<&Proxy::PreSharedKey>("PreSharedKey")
+            .fun<&Proxy::DnsServers>("DnsServers")
+            .fun<&Proxy::Mtu>("Mtu")
+            .fun<&Proxy::AllowedIPs>("AllowedIPs")
+            .fun<&Proxy::KeepAlive>("KeepAlive")
+            .fun<&Proxy::TestUrl>("TestUrl")
+            .fun<&Proxy::ClientId>("ClientId");
         context.global().add<&makeDataURI>("makeDataURI")
             .add<&qjs_fetch>("fetch")
             .add<&base64Encode>("atob")
@@ -506,7 +507,7 @@ int script_context_init(qjs::Context &context)
             .add<&currentTime>("time")
             .add<&sleepMs>("sleep")
             .add<&ShowMsgbox>("msgbox")
-            .add<&getUrlArg>("getUrlArg")
+            .add<&qjs_getUrlArg>("getUrlArg")
             .add<&fileGet>("fileGet")
             .add<&fileWrite>("fileWrite");
         context.eval(R"(
@@ -514,7 +515,7 @@ int script_context_init(qjs::Context &context)
         globalThis.Request = interUtils.Request
         globalThis.Response = interUtils.Response
         globalThis.Headers = interUtils.Headers
-        globalThis.NodeInfo = interUtils.NodeInfo
+        globalThis.Proxy = interUtils.Proxy
         import * as std from 'std'
         import * as os from 'os'
         globalThis.std = std

@@ -2,12 +2,12 @@
 #include <mutex>
 #include <toml.hpp>
 
-#include "../config/binding.h"
-#include "../handler/webget.h"
-#include "../script/cron.h"
-#include "../server/webserver.h"
-#include "../utils/logger.h"
-#include "../utils/network.h"
+#include "config/binding.h"
+#include "handler/webget.h"
+#include "script/cron.h"
+#include "server/webserver.h"
+#include "utils/logger.h"
+#include "utils/network.h"
 #include "interfaces.h"
 #include "multithread.h"
 #include "settings.h"
@@ -332,12 +332,14 @@ void readYAMLConf(YAML::Node &node)
     section["quanx_rule_base"] >> global.quanXBase;
     section["loon_rule_base"] >> global.loonBase;
     section["sssub_rule_base"] >> global.SSSubBase;
+    section["singbox_rule_base"] >> global.singBoxBase;
 
     section["default_external_config"] >> global.defaultExtConfig;
     section["append_proxy_type"] >> global.appendType;
     section["proxy_config"] >> global.proxyConfig;
     section["proxy_ruleset"] >> global.proxyRuleset;
     section["proxy_subscription"] >> global.proxySubscription;
+    section["reload_conf_on_request"] >> global.reloadConfOnRequest;
 
     if(node["userinfo"].IsDefined())
     {
@@ -376,6 +378,7 @@ void readYAMLConf(YAML::Node &node)
         section["append_sub_userinfo"] >> global.appendUserinfo;
         section["clash_use_new_field_name"] >> global.clashUseNewField;
         section["clash_proxies_style"] >> global.clashProxiesStyle;
+        section["singbox_add_clash_modes"] >> global.singBoxAddClashModes;
     }
 
     if(section["rename_node"].IsSequence())
@@ -606,10 +609,13 @@ void readTOMLConf(toml::value &root)
                   "quan_rule_base", global.quanBase,
                   "quanx_rule_base", global.quanXBase,
                   "loon_rule_base", global.loonBase,
+                  "sssub_rule_base", global.SSSubBase,
+                  "singbox_rule_base", global.singBoxBase,
                   "proxy_config", global.proxyConfig,
                   "proxy_ruleset", global.proxyRuleset,
                   "proxy_subscription", global.proxySubscription,
-                  "append_proxy_type", global.appendType
+                  "append_proxy_type", global.appendType,
+                  "reload_conf_on_request", global.reloadConfOnRequest
     );
 
     if(filter)
@@ -632,7 +638,8 @@ void readTOMLConf(toml::value &root)
                   "filter_deprecated_nodes", global.filterDeprecated,
                   "append_sub_userinfo", global.appendUserinfo,
                   "clash_use_new_field_name", global.clashUseNewField,
-                  "clash_proxies_style", global.clashProxiesStyle
+                  "clash_proxies_style", global.clashProxiesStyle,
+                  "singbox_add_clash_modes", global.singBoxAddClashModes
     );
 
     auto renameconfs = toml::find_or<std::vector<toml::value>>(section_node_pref, "rename_node", {});
@@ -843,11 +850,14 @@ void readConf()
     ini.get_if_exist("quan_rule_base", global.quanBase);
     ini.get_if_exist("quanx_rule_base", global.quanXBase);
     ini.get_if_exist("loon_rule_base", global.loonBase);
+    ini.get_if_exist("sssub_rule_base", global.SSSubBase);
+    ini.get_if_exist("singbox_rule_base", global.singBoxBase);
     ini.get_if_exist("default_external_config", global.defaultExtConfig);
     ini.get_bool_if_exist("append_proxy_type", global.appendType);
     ini.get_if_exist("proxy_config", global.proxyConfig);
     ini.get_if_exist("proxy_ruleset", global.proxyRuleset);
     ini.get_if_exist("proxy_subscription", global.proxySubscription);
+    ini.get_bool_if_exist("reload_conf_on_request", global.reloadConfOnRequest);
 
     if(ini.section_exist("surge_external_proxy"))
     {
@@ -874,6 +884,7 @@ void readConf()
         ini.get_bool_if_exist("append_sub_userinfo", global.appendUserinfo);
         ini.get_bool_if_exist("clash_use_new_field_name", global.clashUseNewField);
         ini.get_if_exist("clash_proxies_style", global.clashProxiesStyle);
+        ini.get_bool_if_exist("singbox_add_clash_modes", global.singBoxAddClashModes);
         if(ini.item_prefix_exist("rename_node"))
         {
             ini.get_all("rename_node", tempArray);
@@ -1075,6 +1086,7 @@ int loadExternalYAML(YAML::Node &node, ExternalConfig &ext)
     section["quanx_rule_base"] >> ext.quanx_rule_base;
     section["loon_rule_base"] >> ext.loon_rule_base;
     section["sssub_rule_base"] >> ext.sssub_rule_base;
+    section["singbox_rule_base"] >> ext.singbox_rule_base;
 
     section["enable_rule_generator"] >> ext.enable_rule_generator;
     section["overwrite_original_rules"] >> ext.overwrite_original_rules;
@@ -1147,7 +1159,9 @@ int loadExternalTOML(toml::value &root, ExternalConfig &ext)
                   "mellow_rule_base", ext.mellow_rule_base,
                   "quan_rule_base", ext.quan_rule_base,
                   "quanx_rule_base", ext.quanx_rule_base,
+                  "loon_rule_base", ext.loon_rule_base,
                   "sssub_rule_base", ext.sssub_rule_base,
+                  "singbox_rule_base", ext.singbox_rule_base,
                   "add_emoji", ext.add_emoji,
                   "remove_old_emoji", ext.remove_old_emoji,
                   "include_remarks", ext.include,
@@ -1249,6 +1263,7 @@ int loadExternalConfig(std::string &path, ExternalConfig &ext)
     ini.get_if_exist("quanx_rule_base", ext.quanx_rule_base);
     ini.get_if_exist("loon_rule_base", ext.loon_rule_base);
     ini.get_if_exist("sssub_rule_base", ext.sssub_rule_base);
+    ini.get_if_exist("singbox_rule_base", ext.singbox_rule_base);
 
     ini.get_bool_if_exist("overwrite_original_rules", ext.overwrite_original_rules);
     ini.get_bool_if_exist("enable_rule_generator", ext.enable_rule_generator);

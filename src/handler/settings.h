@@ -3,16 +3,16 @@
 
 #include <string>
 
-#include "../config/crontask.h"
-#include "../config/regmatch.h"
-#include "../config/proxygroup.h"
-#include "../config/ruleset.h"
-#include "../generator/config/ruleconvert.h"
-#include "../generator/template/templates.h"
-#include "../utils/logger.h"
-#include "../utils/string.h"
-#include "../utils/stl_extra.h"
-#include "../utils/tribool.h"
+#include "config/crontask.h"
+#include "config/regmatch.h"
+#include "config/proxygroup.h"
+#include "config/ruleset.h"
+#include "generator/config/ruleconvert.h"
+#include "generator/template/templates.h"
+#include "utils/logger.h"
+#include "utils/string.h"
+#include "utils/stl_extra.h"
+#include "utils/tribool.h"
 
 struct Settings
 {
@@ -43,11 +43,12 @@ struct Settings
     std::string generateProfiles;
 
     //preferences
+    bool reloadConfOnRequest = false;
     RegexMatchConfigs renames, emojis;
     bool addEmoji = false, removeEmoji = false, appendType = false, filterDeprecated = true;
     tribool UDPFlag, TFOFlag, skipCertVerify, TLS13Flag, enableInsert;
     bool enableSort = false, updateStrict = false;
-    bool clashUseNewField = false;
+    bool clashUseNewField = false, singBoxAddClashModes = true;
     std::string clashProxiesStyle = "flow";
     std::string proxyConfig, proxyRuleset, proxySubscription;
     int updateInterval = 0;
@@ -55,7 +56,7 @@ struct Settings
 
     std::string clashBase;
     ProxyGroupConfigs customProxyGroups;
-    std::string surgeBase, surfboardBase, mellowBase, quanBase, quanXBase, loonBase, SSSubBase;
+    std::string surgeBase, surfboardBase, mellowBase, quanBase, quanXBase, loonBase, SSSubBase, singBoxBase;
     std::string surgeSSRPath, quanXDevID;
 
     //cache system
@@ -84,6 +85,7 @@ struct ExternalConfig
     std::string quanx_rule_base;
     std::string loon_rule_base;
     std::string sssub_rule_base;
+    std::string singbox_rule_base;
     RegexMatchConfigs rename;
     RegexMatchConfigs emoji;
     string_array include;

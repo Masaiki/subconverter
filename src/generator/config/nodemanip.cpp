@@ -3,18 +3,18 @@
 #include <iostream>
 #include <algorithm>
 
-#include "../../handler/settings.h"
-#include "../../handler/webget.h"
-#include "../../parser/config/proxy.h"
-#include "../../parser/infoparser.h"
-#include "../../parser/subparser.h"
-#include "../../script/script_quickjs.h"
-#include "../../utils/file_extra.h"
-#include "../../utils/logger.h"
-#include "../../utils/map_extra.h"
-#include "../../utils/network.h"
-#include "../../utils/regexp.h"
-#include "../../utils/urlencode.h"
+#include "handler/settings.h"
+#include "handler/webget.h"
+#include "parser/config/proxy.h"
+#include "parser/infoparser.h"
+#include "parser/subparser.h"
+#include "script/script_quickjs.h"
+#include "utils/file_extra.h"
+#include "utils/logger.h"
+#include "utils/map_extra.h"
+#include "utils/network.h"
+#include "utils/regexp.h"
+#include "utils/urlencode.h"
 #include "nodemanip.h"
 #include "subexport.h"
 
@@ -157,7 +157,7 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
                 writeLog(LOG_TYPE_WARN, "No system proxy is set. Skipping.");
         }
         */
-        if(strSub.size())
+        if(!strSub.empty())
         {
             writeLog(LOG_TYPE_INFO, "Parsing subscription data...");
             if(explodeConfContent(strSub, nodes) == 0)
@@ -210,20 +210,20 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
         for(Proxy &x : nodes)
         {
             x.GroupId = groupID;
-            if(custom_group.size())
+            if(!custom_group.empty())
                 x.Group = custom_group;
         }
         copyNodes(nodes, allNodes);
         break;
     default:
         explode(link, node);
-        if(node.Type == -1)
+        if(node.Type == ProxyType::Unknown)
         {
             writeLog(LOG_TYPE_ERROR, "No valid link found.");
             return -1;
         }
         node.GroupId = groupID;
-        if(custom_group.size())
+        if(!custom_group.empty())
             node.Group = custom_group;
         allNodes.emplace_back(std::move(node));
     }
@@ -494,9 +494,9 @@ void preprocessNodes(std::vector<Proxy> &nodes, extra_settings &ext)
                     auto compare = (std::function<int(const Proxy&, const Proxy&)>) ctx.eval("compare");
                     auto comparer = [&](const Proxy &a, const Proxy &b)
                     {
-                        if(a.Type == ProxyType::Unknow)
+                        if(a.Type == ProxyType::Unknown)
                             return 1;
-                        if(b.Type == ProxyType::Unknow)
+                        if(b.Type == ProxyType::Unknown)
                             return 0;
                         return compare(a, b);
                     };

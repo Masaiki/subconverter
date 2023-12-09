@@ -7,13 +7,14 @@
 
 #include <curl/curl.h>
 
-#include "../handler/settings.h"
-#include "../utils/base64/base64.h"
-#include "../utils/defer.h"
-#include "../utils/file_extra.h"
-#include "../utils/logger.h"
-#include "../utils/urlencode.h"
-#include "../version.h"
+#include "handler/settings.h"
+#include "utils/base64/base64.h"
+#include "utils/defer.h"
+#include "utils/file_extra.h"
+#include "utils/lock.h"
+#include "utils/logger.h"
+#include "utils/urlencode.h"
+#include "version.h"
 #include "webget.h"
 
 #ifdef _WIN32
@@ -27,74 +28,10 @@ using guarded_mutex = std::lock_guard<std::mutex>;
 std::mutex cache_rw_lock;
 */
 
-class RWLock
-{
-#define WRITE_LOCK_STATUS -1
-#define FREE_STATUS 0
-private:
-    const std::thread::id NULL_THREAD;
-    const bool WRITE_FIRST;
-    std::thread::id m_write_thread_id;
-    std::atomic_int m_lockCount;
-    std::atomic_uint m_writeWaitCount;
-public:
-    RWLock(const RWLock&) = delete;
-    RWLock& operator=(const RWLock&) = delete;
-    RWLock(bool writeFirst = true): WRITE_FIRST(writeFirst), m_write_thread_id(), m_lockCount(0), m_writeWaitCount(0) {}
-    virtual ~RWLock() = default;
-    int readLock()
-    {
-        if (std::this_thread::get_id() != m_write_thread_id)
-        {
-            int count;
-            if (WRITE_FIRST)
-                do {
-                    while ((count = m_lockCount) == WRITE_LOCK_STATUS || m_writeWaitCount > 0);
-                } while (!m_lockCount.compare_exchange_weak(count, count + 1));
-            else
-                do {
-                    while ((count = m_lockCount) == WRITE_LOCK_STATUS);
-                } while (!m_lockCount.compare_exchange_weak(count, count + 1));
-        }
-        return m_lockCount;
-    }
-    int readUnlock()
-    {
-        if (std::this_thread::get_id() != m_write_thread_id)
-            --m_lockCount;
-        return m_lockCount;
-    }
-    int writeLock()
-    {
-        if (std::this_thread::get_id() != m_write_thread_id)
-        {
-            ++m_writeWaitCount;
-            for (int zero = FREE_STATUS; !m_lockCount.compare_exchange_weak(zero, WRITE_LOCK_STATUS); zero = FREE_STATUS);
-            --m_writeWaitCount;
-            m_write_thread_id = std::this_thread::get_id();
-        }
-        return m_lockCount;
-    }
-    int writeUnlock()
-    {
-        if (std::this_thread::get_id() != m_write_thread_id)
-        {
-            throw std::runtime_error("writeLock/Unlock mismatch");
-        }
-        if (WRITE_LOCK_STATUS != m_lockCount)
-        {
-            throw std::runtime_error("RWLock internal error");
-        }
-        m_write_thread_id = NULL_THREAD;
-        m_lockCount.store(FREE_STATUS);
-        return m_lockCount;
-    }
-};
-
 RWLock cache_rw_lock;
 
 //std::string user_agent_str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36";
-static std::string user_agent_str = "subconverter/" VERSION " cURL/" LIBCURL_VERSION;
+static auto user_agent_str = "subconverter/" VERSION " cURL/" LIBCURL_VERSION;
 
 struct curl_progress_data
 {
@@ -113,27 +50,26 @@ static inline void curl_init()
 
 static int writer(char *data, size_t size, size_t nmemb, std::string *writerData)
 {
-    if(writerData == NULL)
+    if(writerData == nullptr)
         return 0;
 
     writerData->append(data, size*nmemb);
 
-    return size * nmemb;
+    return static_cast<int>(size * nmemb);
 }
 
-static int dummy_writer(char *data, size_t size, size_t nmemb, void *writerData)
+static int dummy_writer(char *, size_t size, size_t nmemb, void *)
 {
     /// dummy writer, do not save anything
-    (void)data;
-    (void)writerData;
-    return size * nmemb;
+    return static_cast<int>(size * nmemb);
 }
 
-static int size_checker(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+//static int size_checker(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+static int size_checker(void *clientp, curl_off_t, curl_off_t dlnow, curl_off_t, curl_off_t)
 {
     if(clientp)
     {
-        curl_progress_data *data = reinterpret_cast<curl_progress_data*>(clientp);
+        auto *data = reinterpret_cast<curl_progress_data*>(clientp);
         if(data->size_limit)
         {
             if(dlnow > data->size_limit)
@@ -143,10 +79,52 @@ static int size_checker(void *clientp, curl_off_t dltotal, curl_off_t dlnow, cur
     return 0;
 }
 
+static int logger(CURL *handle, curl_infotype type, char *data, size_t size, void *userptr)
+{
+    (void)handle;
+    (void)userptr;
+    std::string prefix;
+    switch(type)
+    {
+    case CURLINFO_TEXT:
+        prefix = "CURL_INFO";
+        break;
+    case CURLINFO_HEADER_IN:
+    case CURLINFO_HEADER_OUT:
+        prefix = "CURL_HEADER";
+        break;
+    case CURLINFO_DATA_IN:
+    case CURLINFO_DATA_OUT:
+    default:
+        return 0;
+    }
+    std::string content(data, size);
+    if(content.find("\r\n") != std::string::npos)
+    {
+        string_array lines = split(content, "\r\n");
+        for(auto &x : lines)
+        {
+            std::string log_content = prefix;
+            log_content += ": ";
+            log_content += x;
+            writeLog(0, log_content, LOG_LEVEL_VERBOSE);
+        }
+    }
+    else
+    {
+        std::string log_content = prefix;
+        log_content += ": ";
+        log_content += trimWhitespace(content);
+        writeLog(0, log_content, LOG_LEVEL_VERBOSE);
+    }
+    return 0;
+}
+
 static inline void curl_set_common_options(CURL *curl_handle, const char *url, curl_progress_data *data)
 {
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, global.logLevel == LOG_LEVEL_VERBOSE ? 1L : 0L);
+    curl_easy_setopt(curl_handle, CURLOPT_DEBUGFUNCTION, logger);
     curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
@@ -154,7 +132,6 @@ static inline void curl_set_common_options(CURL *curl_handle, const char *url, c
     curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 15L);
-    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, user_agent_str.data());
     curl_easy_setopt(curl_handle, CURLOPT_COOKIEFILE, "");
     if(data)
     {
@@ -170,18 +147,18 @@ static int curlGet(const FetchArgument &argument, FetchResult &result)
 {
     CURL *curl_handle;
     std::string *data = result.content, new_url = argument.url;
-    struct curl_slist *list = NULL;
-    defer(curl_slist_free_all(list);)
-    long retVal = 0;
+    curl_slist *header_list = nullptr;
+    defer(curl_slist_free_all(header_list);)
+    long retVal;
 
     curl_init();
 
     curl_handle = curl_easy_init();
-    if(argument.proxy.size())
+    if(!argument.proxy.empty())
     {
         if(startsWith(argument.proxy, "cors:"))
         {
-//             list = curl_slist_append(list, "X-Requested-With: subconverter " VERSION);
+            // header_list = curl_slist_append(header_list, "X-Requested-With: subconverter " VERSION);
             new_url = argument.proxy.substr(5) + argument.url;
         }
         else
@@ -190,16 +167,20 @@ static int curlGet(const FetchArgument &argument, FetchResult &result)
     curl_progress_data limit;
     limit.size_limit = global.maxAllowedDownloadSize;
     curl_set_common_options(curl_handle, new_url.data(), &limit);
-    list = curl_slist_append(list, "Content-Type: application/json;charset=utf-8");
+    header_list = curl_slist_append(header_list, "Content-Type: application/json;charset=utf-8");
     if(argument.request_headers)
     {
         for(auto &x : *argument.request_headers)
-            list = curl_slist_append(list, (x.first + ": " + x.second).data());
+        {
+            header_list = curl_slist_append(header_list, (x.first + ": " + x.second).data());
+        }
+        if(!argument.request_headers->contains("User-Agent"))
+            curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, user_agent_str);
     }
-//     list = curl_slist_append(list, "SubConverter-Request: 1");
-//     list = curl_slist_append(list, "SubConverter-Version: " VERSION);
-    if(list)
-        curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, list);
+    // header_list = curl_slist_append(header_list, "SubConverter-Request: 1");
+    // header_list = curl_slist_append(header_list, "SubConverter-Version: " VERSION);
+    if(header_list)
+        curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, header_list);
 
     if(result.content)
     {
@@ -252,7 +233,7 @@ static int curlGet(const FetchArgument &argument, FetchResult &result)
     while(true)
     {
         retVal = curl_easy_perform(curl_handle);
-        if(retVal == CURLE_OK || max_fails >= fail_count)
+        if(retVal == CURLE_OK || max_fails <= fail_count)
             break;
         else
             fail_count++;
@@ -331,10 +312,10 @@ std::string webGet(const std::string &url, const std::string &proxy, unsigned in
         md("cache");
         const std::string url_md5 = getMD5(url);
         const std::string path = "cache/" + url_md5, path_header = path + "_header";
-        struct stat result;
+        struct stat result {};
         if(stat(path.data(), &result) == 0) // cache exist
         {
-            time_t mtime = result.st_mtime, now = time(NULL); // get cache modified time and current time
+            time_t mtime = result.st_mtime, now = time(nullptr); // get cache modified time and current time
             if(difftime(now, mtime) <= cache_ttl) // within TTL
             {
                 writeLog(0, "CACHE HIT: '" + url + "', using local cache.");

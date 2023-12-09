@@ -3,12 +3,12 @@
 #include <duktape.h>
 #include <duk_module_node.h>
 
-#include "../utils/string.h"
-#include "../utils/string_hash.h"
-#include "../handler/webget.h"
-#include "../handler/multithread.h"
-#include "../utils/base64/base64.h"
-#include "../utils/network.h"
+#include "utils/string.h"
+#include "utils/string_hash.h"
+#include "handler/webget.h"
+#include "handler/multithread.h"
+#include "utils/base64/base64.h"
+#include "utils/network.h"
 
 extern int gCacheConfig;
 extern std::string gProxyConfig;
@@ -255,7 +255,7 @@ int duktape_get_res_int(duk_context *ctx)
 std::string duktape_get_res_str(duk_context *ctx)
 {
     if(duk_is_null_or_undefined(ctx, -1))
-        return std::string();
+        return "";
     std::string retstr = duk_safe_to_string(ctx, -1);
     duk_pop(ctx);
     return retstr;
