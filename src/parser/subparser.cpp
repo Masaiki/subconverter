@@ -1265,11 +1265,20 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                     edge.clear();
                     break;
                     case "xhttp"_hash:
-                    singleproxy["xhttp-opts"]["path"] >>= path;
-                    singleproxy["xhttp-opts"]["headers"]["Host"][0] >>= host;
-                    singleproxy["xhttp-opts"]["mode"] >>= mode;
-                    edge.clear();
-                    break;
+                        singleproxy["xhttp-opts"]["path"] >>= path;
+                        singleproxy["xhttp-opts"]["headers"]["Host"] >>= host;
+                        if (host.empty()) {
+                            singleproxy["xhttp-opts"]["headers"]["Host"][0] >>= host;
+                        }
+                        if (host.empty()) {
+                            singleproxy["xhttp-opts"]["headers"]["host"] >>= host;
+                        }
+                        if (host.empty()) {
+                            singleproxy["xhttp-opts"]["headers"]["host"][0] >>= host;
+                        }
+                        singleproxy["xhttp-opts"]["mode"] >>= mode;
+                        edge.clear();
+                        break;
                     case "grpc"_hash:                        singleproxy["servername"] >>= host;
                         singleproxy["grpc-opts"]["grpc-service-name"] >>= path;
                         edge.clear();
@@ -1473,11 +1482,20 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                     edge.clear();
                     break;
                     case "xhttp"_hash:
-                    singleproxy["xhttp-opts"]["path"] >>= path;
-                    singleproxy["xhttp-opts"]["headers"]["Host"][0] >>= host;
-                    singleproxy["xhttp-opts"]["mode"] >>= mode;
-                    edge.clear();
-                    break;
+                        singleproxy["xhttp-opts"]["path"] >>= path;
+                        singleproxy["xhttp-opts"]["headers"]["Host"] >>= host;
+                        if (host.empty()) {
+                            singleproxy["xhttp-opts"]["headers"]["Host"][0] >>= host;
+                        }
+                        if (host.empty()) {
+                            singleproxy["xhttp-opts"]["headers"]["host"] >>= host;
+                        }
+                        if (host.empty()) {
+                            singleproxy["xhttp-opts"]["headers"]["host"][0] >>= host;
+                        }
+                        singleproxy["xhttp-opts"]["mode"] >>= mode;
+                        edge.clear();
+                        break;
                     case "grpc"_hash:                        singleproxy["servername"] >>= host;
                         singleproxy["grpc-opts"]["grpc-service-name"] >>= path;
                         edge.clear();
