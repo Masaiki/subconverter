@@ -274,6 +274,11 @@ void vlessConstruct(Proxy &node, const std::string &group, const std::string &re
             node.Host = host;
             node.QUICSecret = path.empty() ? "/" : trim(path);
             break;
+        case "xhttp"_hash:
+            node.Host = host;
+            node.XHTTPMode = mode.empty() ? "auto" : mode;
+            node.Path = path.empty() ? "/" : urlDecode(trim(path));
+            break;
         default:
             node.Host = (host.empty() && !isIPv4(add) && !isIPv6(add)) ? add.data() : trim(host);
             node.Path = path.empty() ? "/" : urlDecode(trim(path));
@@ -1255,12 +1260,17 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                         }
                         break;
                     case "h2"_hash:
-                        singleproxy["h2-opts"]["path"] >>= path;
-                        singleproxy["h2-opts"]["host"][0] >>= host;
-                        edge.clear();
-                        break;
-                    case "grpc"_hash:
-                        singleproxy["servername"] >>= host;
+                    singleproxy["h2-opts"]["path"] >>= path;
+                    singleproxy["h2-opts"]["host"][0] >>= host;
+                    edge.clear();
+                    break;
+                    case "xhttp"_hash:
+                    singleproxy["xhttp-opts"]["path"] >>= path;
+                    singleproxy["xhttp-opts"]["headers"]["Host"][0] >>= host;
+                    singleproxy["xhttp-opts"]["mode"] >>= mode;
+                    edge.clear();
+                    break;
+                    case "grpc"_hash:                        singleproxy["servername"] >>= host;
                         singleproxy["grpc-opts"]["grpc-service-name"] >>= path;
                         edge.clear();
                         break;
@@ -1458,12 +1468,17 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
 
                         break;
                     case "h2"_hash:
-                        singleproxy["h2-opts"]["path"] >>= path;
-                        singleproxy["h2-opts"]["host"][0] >>= host;
-                        edge.clear();
-                        break;
-                    case "grpc"_hash:
-                        singleproxy["servername"] >>= host;
+                    singleproxy["h2-opts"]["path"] >>= path;
+                    singleproxy["h2-opts"]["host"][0] >>= host;
+                    edge.clear();
+                    break;
+                    case "xhttp"_hash:
+                    singleproxy["xhttp-opts"]["path"] >>= path;
+                    singleproxy["xhttp-opts"]["headers"]["Host"][0] >>= host;
+                    singleproxy["xhttp-opts"]["mode"] >>= mode;
+                    edge.clear();
+                    break;
+                    case "grpc"_hash:                        singleproxy["servername"] >>= host;
                         singleproxy["grpc-opts"]["grpc-service-name"] >>= path;
                         edge.clear();
                         break;
@@ -1830,11 +1845,11 @@ void explodeStdVless(std::string vless, Proxy &node) {
             host = getUrlArg(addition, strFind(addition, "sni") ? "sni" : "host");
             path = getUrlArg(addition, "path");
             break;
-        case "xhttp"_hash: // 新增对 type=xhttp 的支持
-            net = "h2"; // 视为 h2/http2 传输
+        case "xhttp"_hash:
             type = getUrlArg(addition, "headerType");
             host = getUrlArg(addition, strFind(addition, "sni") ? "sni" : "host");
             path = getUrlArg(addition, "path");
+            mode = getUrlArg(addition, "mode");
             break;
         case "grpc"_hash:
             host = getUrlArg(addition, "sni");

@@ -130,6 +130,7 @@ struct Proxy {
     String OBFSPassword;
     String GRPCServiceName;
     String GRPCMode;
+    String XHTTPMode;
     String ShortId;
     String Flow;
     String Encryption;
