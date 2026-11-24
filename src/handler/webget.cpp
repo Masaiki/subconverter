@@ -146,6 +146,7 @@ static inline void curl_set_common_options(CURL *curl_handle, const char *url, c
 static int curlGet(const FetchArgument &argument, FetchResult &result)
 {
     CURL *curl_handle;
+    char errorBuffer[CURL_ERROR_SIZE] = "";
     std::string *data = result.content, new_url = argument.url;
     curl_slist *header_list = nullptr;
     defer(curl_slist_free_all(header_list);)
@@ -164,6 +165,7 @@ static int curlGet(const FetchArgument &argument, FetchResult &result)
         else
             curl_easy_setopt(curl_handle, CURLOPT_PROXY, argument.proxy.data());
     }
+    curl_easy_setopt(curl_handle, CURLOPT_ERRORBUFFER, errorBuffer);
     curl_progress_data limit;
     limit.size_limit = global.maxAllowedDownloadSize;
     curl_set_common_options(curl_handle, new_url.data(), &limit);
@@ -265,8 +267,10 @@ static int curlGet(const FetchArgument &argument, FetchResult &result)
 
     if(data && !argument.keep_resp_on_fail)
     {
-        if(retVal != CURLE_OK || *result.status_code != 200)
-            data->clear();
+        if(retVal != CURLE_OK)
+            *data = "[CURL_ERROR] cURL failed with code " + std::to_string(retVal) + ": " + std::string(errorBuffer);
+        else if(*result.status_code != 200)
+            *data = "[CURL_ERROR] HTTP error code " + std::to_string(*result.status_code);
         data->shrink_to_fit();
     }
 

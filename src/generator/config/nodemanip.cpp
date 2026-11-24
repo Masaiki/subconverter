@@ -157,7 +157,7 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
                 writeLog(LOG_TYPE_WARN, "No system proxy is set. Skipping.");
         }
         */
-        if(!strSub.empty())
+        if(!strSub.empty() && !startsWith(strSub, "[CURL_ERROR]"))
         {
             writeLog(LOG_TYPE_INFO, "Parsing subscription data...");
             if(explodeConfContent(strSub, nodes) == 0)
@@ -185,7 +185,12 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
         }
         else
         {
-            writeLog(LOG_TYPE_ERROR, "Cannot download subscription data.");
+            if(startsWith(strSub, "[CURL_ERROR]")) {
+                parse_set.err_msg = strSub.substr(12); // Remove "[CURL_ERROR]"
+                writeLog(LOG_TYPE_ERROR, "Fetch error: " + parse_set.err_msg);
+            } else {
+                writeLog(LOG_TYPE_ERROR, "Cannot download subscription data.");
+            }
             return -1;
         }
         break;

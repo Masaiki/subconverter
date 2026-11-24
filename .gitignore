@@ -9,3 +9,18 @@ scripts/yaml-cpp
 src/.DS_Store
 
 build
+
+/_build_deps/
+/_cross_build/
+/_cross_sysroot/
+/_local/
+/CMakeFiles/
+/CMakeCache.txt
+/Makefile
+/cmake_install.cmake
+/subconverter
+/base/subconverter
+/base/subconverter-linux-x64
+/base/pref.toml
+/base/output.conf
+/output.txt

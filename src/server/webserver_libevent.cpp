@@ -269,6 +269,9 @@ static void on_request(evhttp_request *req, void *args)
 
     for (auto &x : response.headers)
         evhttp_add_header(req->output_headers, x.first.data(), x.second.data());
+    evhttp_add_header(req->output_headers, "Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    evhttp_add_header(req->output_headers, "Pragma", "no-cache");
+    evhttp_add_header(req->output_headers, "Expires", "0");
 
     switch (retVal)
     {

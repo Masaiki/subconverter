@@ -153,6 +153,9 @@ int WebServer::start_web_server_multi(listener_args *args)
             return httplib::Server::HandlerResponse::Handled;
         }
         res.set_header("Server", "subconverter/" VERSION " cURL/" LIBCURL_VERSION);
+        res.set_header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+        res.set_header("Pragma", "no-cache");
+        res.set_header("Expires", "0");
         if (require_auth)
         {
             static std::string auth_token = "Basic " + base64Encode(auth_user + ":" + auth_password);

@@ -578,11 +578,13 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
             x = regTrim(x);
             writeLog(0, "Fetching node data from url '" + x + "'.", LOG_LEVEL_INFO);
             if (addNodes(x, insert_nodes, groupID, parse_set) == -1) {
+                std::string err_str = "The following link doesn't contain any valid node info: " + x;
+                if (!parse_set.err_msg.empty()) err_str += "\nReason: " + parse_set.err_msg;
                 if (global.skipFailedLinks)
-                    writeLog(0, "The following link doesn't contain any valid node info: " + x, LOG_LEVEL_WARNING);
+                    writeLog(0, err_str, LOG_LEVEL_WARNING);
                 else {
                     *status_code = 400;
-                    return "The following link doesn't contain any valid node info: " + x;
+                    return err_str;
                 }
             }
             groupID--;
@@ -596,11 +598,13 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         //std::cerr<<"Fetching node data from url '"<<x<<"'."<<std::endl;
         writeLog(0, "Fetching node data from url '" + x + "'.", LOG_LEVEL_INFO);
         if (addNodes(x, nodes, groupID, parse_set) == -1) {
+            std::string err_str = "The following link doesn't contain any valid node info: " + x;
+            if (!parse_set.err_msg.empty()) err_str += "\nReason: " + parse_set.err_msg;
             if (global.skipFailedLinks)
-                writeLog(0, "The following link doesn't contain any valid node info: " + x, LOG_LEVEL_WARNING);
+                writeLog(0, err_str, LOG_LEVEL_WARNING);
             else {
                 *status_code = 400;
-                return "The following link doesn't contain any valid node info: " + x;
+                return err_str;
             }
         }
         groupID++;
@@ -1033,11 +1037,13 @@ std::string surgeConfToClash(RESPONSE_CALLBACK_ARGS) {
         //std::cerr<<"Fetching node data from url '"<<x<<"'."<<std::endl;
         writeLog(0, "Fetching node data from url '" + x + "'.", LOG_LEVEL_INFO);
         if (addNodes(x, nodes, 0, parse_set) == -1) {
+            std::string err_str = "The following link doesn't contain any valid node info: " + x;
+            if (!parse_set.err_msg.empty()) err_str += "\nReason: " + parse_set.err_msg;
             if (global.skipFailedLinks)
-                writeLog(0, "The following link doesn't contain any valid node info: " + x, LOG_LEVEL_WARNING);
+                writeLog(0, err_str, LOG_LEVEL_WARNING);
             else {
                 *status_code = 400;
-                return "The following link doesn't contain any valid node info: " + x;
+                return err_str;
             }
         }
     }
