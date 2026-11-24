@@ -64,6 +64,9 @@ const std::vector<UAProfile> UAMatchList = {
     {"ClashforWindows", "\\/([0-9.]+)", "0.11", "clash", true},
     {"ClashforWindows", "", "", "clash", false},
     {"clash-verge", "", "", "clash", true},
+    {"clash.meta/", "", "", "clash", true},
+    {"mihomo/", "", "", "clash", true},
+    {"ClashMeta/", "", "", "clash", true},
     {"ClashX Pro", "", "", "clash", true},
     {"ClashX", "\\/([0-9.]+)", "0.13", "clash", true},
     {"Clash", "", "", "clash", true},
@@ -294,10 +297,18 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     int *status_code = &response.status_code;
 
     std::string argTarget = getUrlArg(argument, "target"), argSurgeVer = getUrlArg(argument, "ver");
+    const std::string subscription_ua = getUrlArg(argument, "ua");
+    if (subscription_ua.size() > 512 || std::any_of(subscription_ua.begin(), subscription_ua.end(),
+            [](unsigned char ch) { return ch < 32 || ch == 127; })) {
+        *status_code = 400;
+        return "Invalid subscription User-Agent!";
+    }
     tribool argClashNewField = getUrlArg(argument, "new_name");
     int intSurgeVer = !argSurgeVer.empty() ? to_int(argSurgeVer, 3) : 3;
     if (argTarget == "auto")
         matchUserAgent(request.headers["User-Agent"], argTarget, argClashNewField, intSurgeVer);
+    if (argTarget == "mihomo" || argTarget == "clashmeta")
+        argTarget = "clash";
 
     /// don't try to load groups or rulesets when generating simple subscriptions
     bool lSimpleSubscription = false;
@@ -308,6 +319,8 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         case "sssub"_hash:
         case "v2ray"_hash:
         case "trojan"_hash:
+        case "vless"_hash:
+        case "hysteria2"_hash:
         case "mixed"_hash:
             lSimpleSubscription = true;
             break;
@@ -566,7 +579,10 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     parse_set.time_rules = &time_temp;
     parse_set.sub_info = &subInfo;
     parse_set.authorized = authorized;
-    parse_set.request_header = &request.headers;
+    auto subscription_headers = request.headers;
+    if (!subscription_ua.empty())
+        subscription_headers["User-Agent"] = subscription_ua;
+    parse_set.request_header = &subscription_headers;
     parse_set.js_runtime = ext.js_runtime;
     parse_set.js_context = ext.js_context;
 
@@ -818,19 +834,19 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
             break;
         case "vless"_hash:
             writeLog(0, "Generate target: vless", LOG_LEVEL_INFO);
-            output_content = proxyToSingle(nodes, 16, ext);
+            output_content = proxyToSingle(nodes, 32, ext);
             if (argUpload)
                 uploadGist("vless", argUploadPath, output_content, false);
             break;
         case "hysteria2"_hash:
             writeLog(0, "Generate target: hysteria2", LOG_LEVEL_INFO);
-            output_content = proxyToSingle(nodes, 32, ext);
+            output_content = proxyToSingle(nodes, 16, ext);
             if (argUpload)
                 uploadGist("hysteria2", argUploadPath, output_content, false);
             break;
         case "mixed"_hash:
             writeLog(0, "Generate target: Standard Subscription", LOG_LEVEL_INFO);
-            output_content = proxyToSingle(nodes, 63, ext);
+            output_content = proxyToSingle(nodes, 255, ext);
             if (argUpload)
                 uploadGist("sub", argUploadPath, output_content, false);
             break;

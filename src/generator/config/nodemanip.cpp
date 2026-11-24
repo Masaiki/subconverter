@@ -34,6 +34,7 @@ void copyNodes(std::vector<Proxy> &source, std::vector<Proxy> &dest)
 
 int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_settings &parse_set)
 {
+    parse_set.err_msg.clear();
     std::string &proxy = *parse_set.proxy, &subInfo = *parse_set.sub_info;
     string_array &exclude_remarks = *parse_set.exclude_remarks;
     string_array &include_remarks = *parse_set.include_remarks;
@@ -284,7 +285,7 @@ void filterNodes(std::vector<Proxy> &nodes, string_array &exclude_remarks, strin
         if(chkIgnore(*iter, exclude_remarks, include_remarks))
         {
             writeLog(LOG_TYPE_INFO, "Node  " + iter->Group + " - " + iter->Remark + "  has been ignored and will not be added.");
-            nodes.erase(iter);
+            iter = nodes.erase(iter);
         }
         else
         {

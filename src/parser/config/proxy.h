@@ -127,10 +127,14 @@ struct Proxy {
     String DownMbps;
     String Insecure;
     String Fingerprint;
+    String ClientFingerprint;
+    String ECHConfig;
     String OBFSPassword;
     String GRPCServiceName;
     String GRPCMode;
     String XHTTPMode;
+    // Native Mihomo node options, kept separately from the cross-platform model.
+    String MihomoYaml;
     String ShortId;
     String Flow;
     String Encryption;

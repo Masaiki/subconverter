@@ -315,8 +315,15 @@ std::string webGet(const std::string &url, const std::string &proxy, unsigned in
     if(cache_ttl > 0)
     {
         md("cache");
-        const std::string url_md5 = getMD5(url);
-        const std::string path = "cache/" + url_md5, path_header = path + "_header";
+        // A subscription URL can serve different formats and nodes depending on its UA.
+        // Keep config/rule caches (which have no request headers) unchanged.
+        std::string cache_key = url;
+        if (request_headers) {
+            auto ua = request_headers->find("User-Agent");
+            cache_key += '\n';
+            cache_key += ua == request_headers->end() ? user_agent_str : ua->second;
+        }
+        const std::string path = "cache/" + getMD5(cache_key), path_header = path + "_header";
         struct stat result {};
         if(stat(path.data(), &result) == 0) // cache exist
         {

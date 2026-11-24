@@ -137,7 +137,10 @@ bool applyMatcher(const std::string &rule, std::string &real_rule, const Proxy &
         {ProxyType::WireGuard, "WIREGUARD"},
         {ProxyType::VLESS, "VLESS"},
         {ProxyType::Hysteria, "HYSTERIA"},
-        {ProxyType::Hysteria2, "HYSTERIA2"}
+        {ProxyType::Hysteria2, "HYSTERIA2"},
+        {ProxyType::TUIC, "TUIC"},
+        {ProxyType::AnyTLS, "ANYTLS"},
+        {ProxyType::Mieru, "MIERU"}
     };
     if (startsWith(rule, "!!GROUP=")) {
         regGetMatch(rule, group_regex, 3, 0, &target, &ret_real_rule);
@@ -151,9 +154,8 @@ bool applyMatcher(const std::string &rule, std::string &real_rule, const Proxy &
     } else if (startsWith(rule, "!!TYPE=")) {
         regGetMatch(rule, type_regex, 3, 0, &target, &ret_real_rule);
         real_rule = ret_real_rule;
-        if (node.Type == ProxyType::Unknown)
-            return false;
-        return regMatch(types.at(node.Type), target);
+        const auto type = types.find(node.Type);
+        return type != types.end() && regMatch(type->second, target);
     } else if (startsWith(rule, "!!PORT=")) {
         regGetMatch(rule, port_regex, 3, 0, &target, &ret_real_rule);
         real_rule = ret_real_rule;
@@ -219,6 +221,23 @@ groupGenerate(const std::string &rule, std::vector<Proxy> &nodelist, string_arra
     }
 }
 
+// yaml-cpp may emit strings such as "0000" and "true" as plain scalars.
+// Keep them strings when they are credentials, names, or TLS parameters.
+static void keepMihomoStrings(YAML::Node node) {
+    static const string_array fields = {"name", "server", "password", "token", "uuid", "fingerprint",
+        "client-fingerprint", "public-key", "short-id", "obfs-password", "ports", "sni", "servername"};
+    for (const auto &field : fields) {
+        auto value = node[field];
+        if (value.IsScalar() && regMatch(value.Scalar(),
+                R"((?i)(?:[-+]?\d[\d_.e+-]*|true|false|yes|no|on|off|null))"))
+            value.SetTag("tag:yaml.org,2002:str");
+    }
+    for (const auto *field : {"reality-opts", "download-settings", "xhttp-opts", "realm-opts"}) {
+        auto child = node[field];
+        if (child.IsMap()) keepMihomoStrings(child);
+    }
+}
+
 void
 proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupConfigs &extra_proxy_group, bool clashR,
              extra_settings &ext) {
@@ -273,7 +292,8 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
         singleproxy["server"] = x.Hostname;
         singleproxy["port"] = x.Port;
 
-        switch (x.Type) {
+        const bool use_native = !clashR && !x.MihomoYaml.empty();
+        if (!use_native) switch (x.Type) {
             case ProxyType::Shadowsocks:
                 //latest clash core removed support for chacha20 encryption
                 if (ext.filter_deprecated && x.EncryptMethod == "chacha20")
@@ -535,7 +555,13 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 if (!scv.is_undef())
                     singleproxy["skip-cert-verify"] = scv.get();
                 if (!x.Alpn.empty())
-                    singleproxy["alpn"].push_back(x.Alpn);
+                    singleproxy["alpn"] = split(x.Alpn, ",");
+                if (!x.Fingerprint.empty())
+                    singleproxy["fingerprint"] = x.Fingerprint;
+                if (!x.ECHConfig.empty()) {
+                    singleproxy["ech-opts"]["enable"] = true;
+                    singleproxy["ech-opts"]["config"] = x.ECHConfig;
+                }
                 if (!x.OBFSParam.empty())
                     singleproxy["obfs"] = x.OBFSParam;
                 if (!x.OBFSPassword.empty())
@@ -560,7 +586,7 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 if (!scv.is_undef())
                     singleproxy["skip-cert-verify"] = scv.get();
                 if (!x.Alpn.empty())
-                    singleproxy["alpn"].push_back(x.Alpn);
+                    singleproxy["alpn"] = split(x.Alpn, ",");
                 singleproxy["disable-sni"] = x.DisableSni.get();
                 singleproxy["reduce-rtt"] = x.ReduceRtt.get();
                 singleproxy["request-timeout"] = x.RequestTimeout;
@@ -575,6 +601,10 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 break;
             case ProxyType::AnyTLS:
                 singleproxy["type"] = "anytls";
+                if (!x.ClientFingerprint.empty())
+                    singleproxy["client-fingerprint"] = x.ClientFingerprint;
+                if (!tfo.is_undef())
+                    singleproxy["tfo"] = tfo.get();
                 if (!x.Password.empty()) {
                     singleproxy["password"] = x.Password;
                 }
@@ -707,7 +737,7 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                             singleproxy["xhttp-opts"]["mode"] = x.XHTTPMode;
                         singleproxy["xhttp-opts"]["path"] = x.Path;
                         if (!x.Host.empty())
-                            singleproxy["xhttp-opts"]["headers"]["Host"].push_back(x.Host);
+                            singleproxy["xhttp-opts"]["host"] = x.Host;
                         break;
                     default:
                         continue;
@@ -717,12 +747,33 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 continue;
         }
 
-        // UDP is not supported yet in clash using snell
-        // sees in https://dreamacro.github.io/clash/configuration/outbound.html#snell
-        if (udp && x.Type != ProxyType::Snell && x.Type != ProxyType::TUIC)
+        if (use_native) {
+            // Keep native fields and their YAML types. Apply converter settings only where
+            // requested; never replace e.g. the XHTTP Host with the TLS server name.
+            auto native = YAML::Load(x.MihomoYaml);
+            native["name"] = x.Remark;
+            native["server"] = x.Hostname;
+            if (!native["port"].IsDefined() && x.Port)
+                native["port"] = x.Port;
+            if (x.Type == ProxyType::Hysteria2 && !native["password"].IsDefined() && !x.Password.empty())
+                native["password"] = x.Password;
+            if (x.Type == ProxyType::VLESS && !native["servername"].IsDefined() && !x.ServerName.empty())
+                native["servername"] = x.ServerName;
+            if (!scv.is_undef())
+                native["skip-cert-verify"] = scv.get();
+            if (!tfo.is_undef())
+                native["tfo"] = tfo.get();
+            if (!udp.is_undef() && x.Type != ProxyType::TUIC)
+                native["udp"] = udp.get();
+            singleproxy = native;
+        } else if (udp && x.Type != ProxyType::Snell && x.Type != ProxyType::TUIC) {
             singleproxy["udp"] = true;
+        }
         if (!clashR && !x.UnderlyingProxy.empty())
             singleproxy["dialer-proxy"] = x.UnderlyingProxy;
+        if (use_native || x.Type == ProxyType::AnyTLS || x.Type == ProxyType::Hysteria2 ||
+            x.Type == ProxyType::TUIC || x.Type == ProxyType::VLESS)
+            keepMihomoStrings(singleproxy);
         if (proxy_block)
             singleproxy.SetStyle(YAML::EmitterStyle::Block);
         else
@@ -1243,12 +1294,13 @@ std::string proxyToSurge(std::vector<Proxy> &nodes, const std::string &base_conf
 }
 
 std::string proxyToSingle(std::vector<Proxy> &nodes, int types, extra_settings &ext) {
-    /// types: SS=1 SSR=2 VMess=4 Trojan=8,hysteria2=16,vless=32
-    std::string proxyStr, allLinks;
+    // types: SS=1 SSR=2 VMess=4 Trojan=8 Hysteria2=16 VLESS=32 AnyTLS=64 TUIC=128
+    std::string allLinks;
     bool ss = GETBIT(types, 1), ssr = GETBIT(types, 2), vmess = GETBIT(types, 3), trojan = GETBIT(types, 4), hysteria2 =
-            GETBIT(types, 5), vless = GETBIT(types, 6);
+            GETBIT(types, 5), vless = GETBIT(types, 6), anytls = GETBIT(types, 7), tuic = GETBIT(types, 8);
 
     for (Proxy &x: nodes) {
+        std::string proxyStr;
         std::string remark = x.Remark;
         std::string &hostname = x.Hostname, &sni = x.ServerName, &password = x.Password, &method = x.EncryptMethod, &
                         plugin = x.Plugin, &pluginopts = x.PluginOption, &protocol = x.Protocol, &protoparam = x.
@@ -1306,23 +1358,50 @@ std::string proxyToSingle(std::vector<Proxy> &nodes, int types, extra_settings &
                                vmessLinkConstruct(remark, hostname, port, faketype, id, aid, transproto, path, host,
                                                   tlssecure ? "tls" : ""));
                 break;
-            case ProxyType::Hysteria2:
-                if (!hysteria2)
-                    continue;
-                proxyStr = "hysteria2://" + password + "@" + hostname + ":" + port + (ports.empty() ? "" : "," + ports)
-                           + "?insecure=" +
-                           (x.AllowInsecure.get() ? "1" : "0");
-                if (!obfsparam.empty()) {
-                    proxyStr += "&obfs=" + obfsparam;
-                    if (!obfsPassword.empty()) {
-                        proxyStr += "&obfs-password=" + obfsparam;
-                    }
+            case ProxyType::Hysteria2: {
+                if (!hysteria2) continue;
+                if (!x.MihomoYaml.empty()) {
+                    auto native = YAML::Load(x.MihomoYaml);
+                    const auto realm = native["realm-opts"];
+                    if (realm.IsDefined() && realm.IsMap() && realm["enable"].as<bool>(false))
+                        continue; // A direct hy2 URI cannot represent a realm endpoint.
                 }
-                if (!sni.empty()) {
-                    proxyStr += "&sni=" + sni;
-                }
+                const auto address = hostname.find(':') == hostname.npos ? hostname : "[" + hostname + "]";
+                proxyStr = "hysteria2://" + (password.empty() ? "" : urlEncode(password) + "@") + address + ":" +
+                           (ports.empty() ? port : ports) + "/?insecure=" + (x.AllowInsecure.get() ? "1" : "0");
+                if (!obfsparam.empty()) proxyStr += "&obfs=" + urlEncode(obfsparam);
+                if (!obfsPassword.empty()) proxyStr += "&obfs-password=" + urlEncode(obfsPassword);
+                if (!sni.empty()) proxyStr += "&sni=" + urlEncode(sni);
+                if (!fp.empty()) proxyStr += "&pinSHA256=" + urlEncode(fp);
+                if (!x.ECHConfig.empty()) proxyStr += "&ech=" + urlEncode(x.ECHConfig);
                 proxyStr += "#" + urlEncode(remark);
                 break;
+            }
+            case ProxyType::AnyTLS: {
+                if (!anytls) continue;
+                const auto address = hostname.find(':') == hostname.npos ? hostname : "[" + hostname + "]";
+                proxyStr = "anytls://" + (password.empty() ? "" : urlEncode(password) + "@") + address + ":" +
+                           port + "/?insecure=" + (x.AllowInsecure.get() ? "1" : "0");
+                if (!x.SNI.empty()) proxyStr += "&sni=" + urlEncode(x.SNI);
+                if (!fp.empty()) proxyStr += "&hpkp=" + urlEncode(fp);
+                proxyStr += "#" + urlEncode(remark);
+                break;
+            }
+            case ProxyType::TUIC: {
+                if (!tuic || (id.empty() && x.token.empty())) continue;
+                const auto address = hostname.find(':') == hostname.npos ? hostname : "[" + hostname + "]";
+                const auto auth = id.empty() ? urlEncode(x.token) : urlEncode(id) + ":" + urlEncode(password);
+                proxyStr = "tuic://" + auth + "@" + address + ":" + port + "/?";
+                if (!sni.empty()) proxyStr += "&sni=" + urlEncode(sni);
+                if (!x.Alpn.empty()) proxyStr += "&alpn=" + urlEncode(x.Alpn);
+                if (!x.CongestionControl.empty()) proxyStr += "&congestion_control=" + urlEncode(x.CongestionControl);
+                if (!x.UdpRelayMode.empty()) proxyStr += "&udp_relay_mode=" + urlEncode(x.UdpRelayMode);
+                if (x.DisableSni) proxyStr += "&disable_sni=1";
+                if (x.AllowInsecure) proxyStr += "&insecure=1";
+                if (x.ReduceRtt) proxyStr += "&reduce_rtt=1";
+                proxyStr += "#" + urlEncode(remark);
+                break;
+            }
             case ProxyType::VLESS:
                 if (!vless)
                     continue;
@@ -1361,8 +1440,10 @@ std::string proxyToSingle(std::vector<Proxy> &nodes, int types, extra_settings &
                     proxyStr += "&packet-encoding=" + packet_encoding;
                 }
                 if (!alpns.empty()) {
-                    proxyStr += "&alpn=" + alpns[0];
+                    proxyStr += "&alpn=" + urlEncode(join(alpns, ","));
                 }
+                if (!x.Encryption.empty())
+                    proxyStr += "&encryption=" + urlEncode(x.Encryption);
                 if (!sni.empty()) {
                     proxyStr += "&sni=" + sni;
                 }
@@ -1376,6 +1457,11 @@ std::string proxyToSingle(std::vector<Proxy> &nodes, int types, extra_settings &
                             if (!host.empty()) {
                                 proxyStr += "&host=" + host;
                             }
+                            proxyStr += "&path=" + urlEncode(path.empty() ? "/" : path);
+                            break;
+                        case "xhttp"_hash:
+                            if (!host.empty()) proxyStr += "&host=" + urlEncode(host);
+                            if (!x.XHTTPMode.empty()) proxyStr += "&mode=" + urlEncode(x.XHTTPMode);
                             proxyStr += "&path=" + urlEncode(path.empty() ? "/" : path);
                             break;
                         case "grpc"_hash:
@@ -1413,7 +1499,8 @@ std::string proxyToSingle(std::vector<Proxy> &nodes, int types, extra_settings &
             default:
                 continue;
         }
-        allLinks += proxyStr + "\n";
+        if (!proxyStr.empty())
+            allLinks += proxyStr + "\n";
     }
 
     if (ext.nodelist)
@@ -2684,6 +2771,9 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                 break;
             }
             case ProxyType::VLESS: {
+                // sing-box does not implement XHTTP or Xray's VLESS encryption.
+                if (x.TransferProtocol == "xhttp" || (!x.Encryption.empty() && x.Encryption != "none"))
+                    continue;
                 addSingBoxCommonMembers(proxy, x, "vless", allocator);
                 proxy.AddMember("uuid", rapidjson::StringRef(x.UserId.c_str()), allocator);
                 if (!x.Encryption.empty() && x.Encryption != "none")

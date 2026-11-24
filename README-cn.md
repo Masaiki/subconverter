@@ -172,6 +172,10 @@ http://127.0.0.1:25500/sub?target=%TARGET%&url=%URL%&config=%CONFIG%
 | url    |  必要 | https%3A%2F%2Fwww.xxx.com | 指机场所提供的订阅链接或代理节点的分享链接，需要经过 [URLEncode](https://www.urlencoder.org/) 处理                                              |
 | config |  可选 | https%3A%2F%2Fwww.xxx.com | 指 外部配置 的地址 (包含分组和规则部分)，需要经过 [URLEncode](https://www.urlencoder.org/) 处理，详见 [外部配置](#外部配置) ，当此参数不存在时使用 程序的主程序目录中的配置文件 |
 
+`ua` 可选：URL 编码后的**上游订阅**请求 User-Agent，例如 `&ua=mihomo%2F1.19.34`。省略时保持客户端 UA 透传；`target=auto` 仍以客户端入站 UA 判断输出格式。订阅缓存按 URL 和上游 UA 区分。
+
+Mihomo 的 HTTP provider 可继续使用 `/sub?target=clash&list=true&url=...`，也可用 `target=mihomo`。AnyTLS、Hysteria2、TUIC 和 VLESS 的原生 Mihomo YAML 节点会保留协议选项，并照常执行节点筛选、重命名和规则生成。`target=mixed` 则输出分享链接，不保证保留 YAML 专有字段。
+
 运行 subconverter 主程序后，按照 [调用说明](#调用说明) 的对应内容替换即可得到一份使用**默认设置**的订阅。
 
 由于此部分篇幅较长，点击下方条目即可展开详解：
