@@ -97,6 +97,10 @@ http://127.0.0.1:25500/sub?target=%TARGET%&url=%URL%&config=%CONFIG%
 | url      | Yes      | https%3A%2F%2Fwww.xxx.com | Subscription to convert. Supports URLs and file paths. Process with [URLEncode](https://www.urlencoder.org/) first. |
 | config   | No       | https%3A%2F%2Fwww.xxx.com | External configuration file path. Supports URLs and file paths. Process with [URLEncode](https://www.urlencoder.org/) first. More examples can be found in [this](https://github.com/lzdnico/subconverteriniexample) repository. |
 
+`ua` sets the User-Agent for fetching subscriptions, e.g. `&ua=mihomo%2F1.19.34`. If omitted, the incoming User-Agent is forwarded as before. `target=auto` still selects the output from the incoming User-Agent, not from `ua`. The subscription cache separates responses by URL and upstream User-Agent.
+
+For a Mihomo HTTP provider, use `target=clash&list=true` (or `target=mihomo&list=true`) to preserve native fields for AnyTLS, Hysteria2, TUIC, and VLESS. `target=mixed` produces share links and cannot carry all YAML options. The compatibility checks use the [Mihomo outbound schemas](https://github.com/MetaCubeX/mihomo/tree/v1.19.34/adapter/outbound), [Mihomo share-link parser](https://github.com/MetaCubeX/mihomo/blob/v1.19.34/common/convert/converter.go), [AnyTLS URI specification](https://github.com/anytls/anytls-go/blob/main/docs/uri_scheme.md), and [Hysteria 2 URI specification](https://v2.hysteria.network/docs/developers/URI-Scheme/).
+
 If you need to merge two or more subscription, you should join them with '|' before the URLEncode process.
 
 Example:
